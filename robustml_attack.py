@@ -7,7 +7,7 @@ import argparse
 import tensorflow as tf
 import numpy as np
 
-import l0_attack
+from l0_attack import modified_papernot_attack
 
 class CarliniAttack(robustml.attack.Attack):
     def __init__(self, sess, epsilon):
@@ -15,7 +15,6 @@ class CarliniAttack(robustml.attack.Attack):
         self._eps = epsilon
         self._sess = sess
 
-    # this is super hacky
     def run(self, x, y):
         return modified_papernot_attack(x, y, 100, self._sess, self._model, self._eps)
 
