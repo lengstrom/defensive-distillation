@@ -17,6 +17,8 @@
 
 import random
 import sys
+from robustml_model import MODEL_PATH
+
 import time
 import tensorflow as tf
 import numpy as np
@@ -24,13 +26,20 @@ import numpy as np
 from setup import *
 from model import make_model
 
+TEMPERATURE = 100
+
+if not os.path.exists(MODEL_PATH):
+    raise RuntimeError('Did you train the models as described in the readme? Run train_distillation.py')
+
+model = make_model(MODEL_PATH)
+
 BATCH_SIZE = 1
 
 img = tf.placeholder(tf.float32, (BATCH_SIZE,IMAGE_SIZE,IMAGE_SIZE,NUM_CHANNELS))
 lab = tf.placeholder(tf.float32, (BATCH_SIZE,10))
 
 delta = tf.Variable(tf.zeros((BATCH_SIZE,IMAGE_SIZE,IMAGE_SIZE,NUM_CHANNELS)))
-out = tf.nn.softmax(model(img+delta)/temperature)
+out = tf.nn.softmax(model(img+delta)/TEMPERATURE)
 
 target_probability = tf.reduce_sum(out*lab,0)
 other_probability = tf.reduce_sum(out*(1-lab),0)
@@ -40,7 +49,7 @@ grads_other = tf.gradients(other_probability, [delta])[0]
 
 has_setup = False
 
-def modified_papernot_attack(imgs, labs, temperature, s, model, eps=112):
+def modified_papernot_attack(imgs, labs, s, eps=112):
     global has_setup
     if not has_setup:
         s.run(tf.global_variables_initializer())
@@ -61,6 +70,8 @@ def modified_papernot_attack(imgs, labs, temperature, s, model, eps=112):
             targets = np.array([np.identity(10)[random.randint(0,9)] for _ in range(BATCH_SIZE)])
 
         # 2. Try changing pixels up to 112 times
+        import pdb
+        pdb.set_trace()
         for _ in range(eps):
 
             # 3. Find which ones we've already succeeded on.
@@ -124,7 +135,6 @@ def modified_papernot_attack(imgs, labs, temperature, s, model, eps=112):
 
 if __name__ == "__main__":
     with tf.Session() as s:
-        model = make_model(sys.argv[1])
         print("Number of pixels changed / Probability of Attack Success")
-        print(modified_papernot_attack(test_data[:10000], test_labels[:10000], TEMPERATURE, s, model, 112))
+        print(modified_papernot_attack(test_data[:10000], test_labels[:10000], s, 112))
 
