@@ -24,22 +24,27 @@ import numpy as np
 from setup import *
 from model import make_model
 
-def modified_papernot_attack(imgs, labs, TEMPERATURE):
-    BATCH_SIZE = 10
+BATCH_SIZE = 1
 
-    delta = tf.Variable(tf.zeros((BATCH_SIZE,IMAGE_SIZE,IMAGE_SIZE,NUM_CHANNELS)))
-    img = tf.placeholder(tf.float32, (BATCH_SIZE,IMAGE_SIZE,IMAGE_SIZE,NUM_CHANNELS))
-    lab = tf.placeholder(tf.float32, (BATCH_SIZE,10))
-    
-    out = tf.nn.softmax(model(img+delta)/TEMPERATURE)
+img = tf.placeholder(tf.float32, (BATCH_SIZE,IMAGE_SIZE,IMAGE_SIZE,NUM_CHANNELS))
+lab = tf.placeholder(tf.float32, (BATCH_SIZE,10))
 
-    target_probability = tf.reduce_sum(out*lab,0)
-    other_probability = tf.reduce_sum(out*(1-lab),0)
+delta = tf.Variable(tf.zeros((BATCH_SIZE,IMAGE_SIZE,IMAGE_SIZE,NUM_CHANNELS)))
+out = tf.nn.softmax(model(img+delta)/temperature)
 
-    grads_target = tf.gradients(target_probability, [delta])[0]
-    grads_other = tf.gradients(other_probability, [delta])[0]
+target_probability = tf.reduce_sum(out*lab,0)
+other_probability = tf.reduce_sum(out*(1-lab),0)
 
-    s.run(tf.global_variables_initializer())
+grads_target = tf.gradients(target_probability, [delta])[0]
+grads_other = tf.gradients(other_probability, [delta])[0]
+
+has_setup = False
+
+def modified_papernot_attack(imgs, labs, temperature, s, model, eps=112):
+    global has_setup
+    if not has_setup:
+        s.run(tf.global_variables_initializer())
+        has_setup = True
 
     total = []
     costs = []
@@ -56,7 +61,7 @@ def modified_papernot_attack(imgs, labs, TEMPERATURE):
             targets = np.array([np.identity(10)[random.randint(0,9)] for _ in range(BATCH_SIZE)])
 
         # 2. Try changing pixels up to 112 times
-        for _ in range(113):
+        for _ in range(eps):
 
             # 3. Find which ones we've already succeeded on.
             the_outs = s.run(out, feed_dict={img: batch_imgs})
@@ -108,20 +113,18 @@ def modified_papernot_attack(imgs, labs, TEMPERATURE):
         different = np.any(different,axis=2)
         
         # And success requires we change fewer than 112 pixels.
-        success &= np.sum(different,axis=1) < 112
-
-        #for e in range(BATCH_SIZE):
-        #    print('out',np.argmax(batch_labs[e]), np.argmax(targets[e]), np.sum(different[e]), success[e])
+        success &= np.sum(different,axis=1) < eps
 
         costs.extend(np.sum(different,axis=1))
         total.extend(success)
         
         print(np.mean(costs),np.mean(total))
+        return batch_imgs
     
 
 if __name__ == "__main__":
     with tf.Session() as s:
         model = make_model(sys.argv[1])
         print("Number of pixels changed / Probability of Attack Success")
-        print(modified_papernot_attack(test_data[:10000], test_labels[:10000], 100))
+        print(modified_papernot_attack(test_data[:10000], test_labels[:10000], TEMPERATURE, s, model, 112))
 
